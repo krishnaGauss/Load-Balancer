@@ -2,9 +2,13 @@ package serverpool
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/krishnaGauss/load-balancer/backend"
+	"github.com/krishnaGauss/load-balancer/utils"
+	"go.uber.org/zap"
 )
 
 type ServerPool interface {
@@ -38,7 +42,7 @@ func (s *roundRobinServerPool) GetNextValidPeer() backend.Backend {
 
 }
 
-func (s *roundRobinServerPool) GetBackends() []backend.Backend{
+func (s *roundRobinServerPool) GetBackends() []backend.Backend {
 	return s.backends
 }
 
@@ -50,12 +54,39 @@ func (s *roundRobinServerPool) AddBackend(b backend.Backend) {
 	s.backends = append(s.backends, b)
 }
 
-
-func HealthCheck(ctx context.Context, s ServerPool){
+func HealthCheck(ctx context.Context, s ServerPool) {
 	aliveChannel := make(chan bool, 1)
-	for _,b:=range s.GetBackends(){
-		b:=b
+	for _, b := range s.GetBackends() {
+		b := b
+
+		//defining context with timeout
+		requestCtx, stop := context.WithTimeout(ctx, 10*time.Second)
+		defer stop()
+
+		//checking on backend
+		go backend.IsAlive(requestCtx, aliveChannel, b.GetURL())
+		status := 0
+
+		select {
+		//exit if parent context cancelled
+		case <-ctx.Done():
+			utils.Logger.Info("Shutting down health check")
+			return
+
+		case alive := <-aliveChannel:
+			b.SetAlive(alive)
+			if !alive {
+				status:="down"
+			}
+		}
+
+		utils.Logger.Debug(
+			"URL Status",
+			zap.String("URL", b.GetURL().String()),
+			zap.String("status", status),
+		)
+
+
 	}
 
-	//defining context with timeout
 }

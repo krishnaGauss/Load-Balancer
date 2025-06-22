@@ -24,3 +24,9 @@ func (lb *loadBalancer) Serve(w http.ResponseWriter, r *http.Request){
 
 	http.Error(w, "Service not available", http.StatusServiceUnavailable)
 }
+
+func NewLoadBalancer(serverPool serverpool.ServerPool) LoadBalancer {
+	return &loadBalancer{
+		serverPool: serverPool,
+	}
+}
